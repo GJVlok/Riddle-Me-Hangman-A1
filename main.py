@@ -1,20 +1,18 @@
-import pygame, sys
+from settings import *
 import math
 import random
 from os.path import join
 import json
-
-# Add song change system?
-# Add better visuals?
-# be able to enter user name
-# xp?
-# just catagories no hints
+from movies import movies_dict
+from animals import animals_dict
+from cities import cities_dict
+from songs import songs_dict
+from actors import actors_dict
+from riddles import riddles
 
 # Setup display
 pygame.init()
 pygame.mixer.init()
-WIDTH, HEIGHT = 1400, 720
-win = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Riddle Me Hangman")
 FPS = 60
 CLOCK = pygame.time.Clock()
@@ -26,17 +24,20 @@ won_total = 0
 lost_total = 0
 hints_used = 0
 longest_streak = 0
+points = 0
 
-# Button variables
+# States
 user_login = False
-game_saved = False
-loaded = False
 is_movies = False
 is_animals = False
 is_cities = False
-hint_status = False
-hint_status2 = False
-hint_status3 = False
+is_songs = False
+is_actors = False
+guessed = []
+choose = []
+streak = 0
+
+# Button Variables
 RADIUS = 35
 GAP = 25
 letters = []
@@ -48,12 +49,12 @@ for i in range(26):
     y = starty + ((i // 13) * (GAP + RADIUS * 2))
     letters.append([x, y, chr(A + i), True])
 
-# fonts
+# Fonts
 HANGMAN_FONT = pygame.font.SysFont('timesnewroman', 70)
-LETTER_FONT = pygame.font.SysFont('comicsans', 35, True)
-WORD_FONT = pygame.font.SysFont('comicsans', 40)
-TITLE_FONT = pygame.font.SysFont('comicsans', 50)
-HINT_FONT = pygame.font.SysFont('comicsans', 30)
+LETTER_FONT = pygame.font.SysFont('Corbel', 35, True)
+WORD_FONT = pygame.font.SysFont('timesnewroman', 40)
+TITLE_FONT = pygame.font.SysFont('timesnewroman', 50)
+HINT_FONT = pygame.font.SysFont('timesnewroman', 30)
 SMALLFONT = pygame.font.SysFont('Corbel', 35, True)
 LOGINFONT = pygame.font.SysFont('Corbel', 60, True)
 USERFONT = pygame.font.SysFont('Corbel', 40, True)
@@ -66,7 +67,7 @@ for i in range(7):
     image = pygame.image.load(join("assets", "images", "hangman" + str(i) + ".png"))
     images.append(image)
 
-# sound setup
+# Sound Setup
 RIGHT_LETTER_SOUND = pygame.mixer.Sound(join("assets", "sound", "mixkit-modern-technology-select-3124.wav"))
 WRONG_LETTER_SOUND = pygame.mixer.Sound(join("assets", "sound", "mixkit-on-or-off-light-switch-tap-2585.wav"))
 COINS_ADD_SOUND = pygame.mixer.Sound(join("assets", "sound", "coins.mp3"))
@@ -74,111 +75,128 @@ NEED_COINS_SOUND = pygame.mixer.Sound(join("assets", "sound", "coin-bag.mp3"))
 LOST_SOUND = pygame.mixer.Sound(join("assets", "sound", "wronganswer.mp3"))
 VICTORY_SOUND = pygame.mixer.Sound(join("assets", "sound", "rightanswer.mp3"))
 # set channel to prevent the music playing over itself and becoming distorted
-# music
+# Music
 pygame.mixer.music.load(join("assets", "sound", "GentleWavesOfSound.mp3"))
 pygame.mixer.music.play(loops=-1, start=0.0, fade_ms=750)
 pygame.mixer.music.set_volume(0.2)
 
-# game variables
+# Game Variables
 hangman_status = 0
 
-movies = [["matrix", "1999", "Action, Sci-fi", "Keanu Reeves"], ["alien", "1979", "Horror, Sci-fi", "Sigourney Weaver"], 
-        ["titanic", "1997", "Historical Drama, Romance", "Leonardo DiCaprio"], ["gladiator", "2000", "Action, Fantasy", "Russell Crowe"],
-        ["robocop", "1987", "Action, Sci-Fi", "Peter Weller"], ["jaws", "1975", "Thriller", "Roy Scheider"],
-        ["grease", "1978", "Musical, Romance", "John Trevolta"], ["rambo", "1982", "Action, Thriller", "Sylvester Stallone"],
-        ["heat", "1995", "Crime Thriller", "Robert De Niro"], ["predator", "1987", "Action, Horror", "Arnold Schwarzenegger"],
-        ["aladdin", "1992", "Animation, Romance", "Robin Williams"], ["shrek", "2000", "Animation, Fantasy", "Mike Myers"],
-        ["aliens", "1986", "Action, Sci-Fi", "Sigourney Weaver"], ["ghost", "1990", "Romance, Supernatural", "Demi Moore"],
-        ["speed", "1994", "Action, Thriller", "Keanu Reeves"], ["inception", "2000", "Sci-Fi, Drama", "Leonardo DiCaprio"],
-        ["halloween", "1978", "Horror, Slasher", "Jamie Lee Curtis"], ["bambi", "1942", "Animation, Drama", "Donnie Dunagan"],
-        ["poltergeist", "1982", "Horror, Fantasy", "Zelda Rubinstein"], ["goldfinger", "1964", "Action, Spy", "Sean Connery"],
-        ["midsommer", "2019", "Drama, Thriller", "!"], ["while you were sleeping", "1995", "Comedy, Romance", "Sandra Bullock"],
-        ["the lord of the rings", "2001 - 2003", "Adventure, Fantasy", "Elijah Wood"], ["up", "2009", "Animation, Comedy", "Edward Asner"],
-        ["blade runner", "1982", "Action, Sci-Fi", "Harrison Ford"], ["blade", "1998", "Action, Horror", "Wesley Snipes"],
-        ["the mummy", "1994", "Action, Adventure", "Brendan Fraser"], ["godzilla", "2014", "Sci-Fi, Thriller", "Bryan Cranston"]]
-
-animals = [["cat", "Domestic", "Feline", "The owner of the house"], ["dog", "Domestic", "Canine", "Man's best friend"], 
-        ["siberian tiger", "Siberia", "Feline", "The Largest"], ["wolf", "North America", "Canine", "Mate for life"],
-        ["lion", "Africa", "Feline", "Only felines that live in a group"], ["red panda", "Himalayas, China", "Ailuridae", "Not related to the Giant Panda"],
-        ["polar bear", "Artic", "Marine Mammal", "Largest carnivore on land"], ["capybara", "South America", "semiaquatic mammal", "Other animals use them as furniture"],
-        ["elephant", "Africa", "Amarula", "Largest land animal"], ["leopard", "Africa", "Feline", "Spots are called Rosettes"],
-        ["rhino", "Africa", "Mammal", "Over 3 tons"], ["platypus", "Australia", "Semiaquatic Mammal", "Venomous"],
-        ["cape buffalo", "Africa", "Mammal", "Unpredictable and aggressive"], ["fish eagle", "Africa", "Large bird of prey", "Related to the North American Bald Eagle"],
-        ["meerkat", "Africa", "Mongoose", "Immune to venom"], ["hippopotamus", "Sub-Saharan Africa", "Semiaquatic Mammal", "Third largest animal in the world"],
-        ["beaver", "North America", "Semiaquatic Mammal", "Teeth are orange"], ["camel","Desert", "North Africa", "Only mammal that can drink salt water"],
-        ["sea otter", "Coast of North Pacific Ocean", "Semiaquatic Mammal", "They'll steal your heart"], ["cheetah", "Africa", "Speedy", "Only males are social"],
-        ["narwhal", "Artic", "Monodon monoceros", "Change color with age"], ["sloth", "Central America", "Slow poke", "Good at swimming"],
-        ["great white shark", "Ocean", "Largest predatory fish", "Has toxic blood"], ["Orca", "Ocean", "Killer of the sea", "Sleeps with one eye open"],
-        ["blue whale", "Ocean", "The Biggest", "One of the loudest voices on earth"], ["sperm whale", "Ocean", "Deep Diver", "Largest brain on the planet"],
-        ["dolphins", "Ocean", "Scary", "Very chatty"], ["godzilla", "Japan", "Hollow Earth", "King of the Monsters"]]
-
-cities = [["johannesburg", "Gauteng", "RSA", "Financial Capital"], ["East London", "Eastern Cape", "RSA", "The only river port"], 
-        ["new york city", "NY", "USA", "More than 800 languages are spoken throughout the city"], ["los angeles", "California", "USA", "Hollywood"],
-        ["olympia", "Washington", "USA", "Medal of Honor Memorial"], ["paris", "EU", "FR", "Notre-Dame Cathedral"],
-        ["nice", "EU", "FR", "Fontaine du Soleil"], ["Barcelona", "EU", "Spain", "La Casa Batllo"],
-        ["madrid", "EU", "Spain", "Puerta de Alcalá"], ["Berlin", "EU", "GER", "The Brandenburg Gate"],
-        ["Hamburg", "EU", "GER", "St. Michaelis Church"], ["stuttgart", "EU", "GER", "Bismarck Tower"],
-        ["london", "ENG", "U.K.", "Buckingham Palace"], ["manchester", "ENG", "U.K.", "Albert Memorial"],
-        ["birmingham", "ENG", "U.K.", "Weoley Castle"], ["edinburgh", "SCT", "U.K.", "Scott Monument"],
-        ["glasgow", "SCT", "U.K.", "Nelson Monument"], ["perth", "SCT", "U.K.", "Inchaffray Abbey"],
-        ["sydney", "AUS", "Oceania", "The Vaucluse House"], ["melbourne", "AUS", "Oceania", "Shrine of Remembrance"],
-        ["adelaide", "AUS", "Oceania", "The Mall's Balls Statue"], ["pretoria", "Gauteng", "RSA", "Voortrekker Monument"],
-        ["cape town", "WC", "RSA", "Rhodes Memorial"], ["kuruman", "NW", "RSA", "The Eye"],
-        ["kimberly", "NC", "RSA", "The Big Hole"], ["bloemfontein", "VS", "RSA", "The National Women's Monument"],
-        ["dubai", "EoD", "UAE", "Burj Khalifa"], ["mexico city", "mexico", "NA", "Was built over water"]]
-
-# Songs
-songs = ["wish you a merry chrismas"]
-random_word_songs = random.choice(songs)
-word_songs = random_word_songs.upper()
-
 # Random Movies
-random_movie = random.choice(movies)
-random_word_movies = random_movie[0]
-word_movies = random_word_movies.upper()
-movie_hint1 = random_movie[1]
-movie_hint2 = random_movie[2]
-movie_hint3 = random_movie[3]
+random_movie = random.choice(list(movies_dict))
+word_movies = random_movie.upper()
+movie_title = movies_dict[random_movie]
 
 # Random Animals
-random_animal = random.choice(animals)
-random_word_animals = random_animal[0]
-word_animals = random_word_animals.upper()
-animal_hint1 = random_animal[1]
-animal_hint2 = random_animal[2]
-animal_hint3 = random_animal[3]
+random_animal = random.choice(list(animals_dict))
+word_animal = random_animal.upper()
+animal_title = animals_dict[random_animal]
 
 # Random Cities
-random_city = random.choice(cities)
-random_word_cities = random_city[0]
-word_cities = random_word_cities.upper()
-cities_hint1 = random_city[1]
-cities_hint2 = random_city[2]
-cities_hint3 = random_city[3]
+random_city = random.choice(list(cities_dict))
+word_city = random_city.upper()
+city_title = cities_dict[random_city]
 
-guessed = []
-choose = []
-streak = 0
+# Random Songs
+random_song = random.choice(list(songs_dict))
+word_song = random_song.upper()
+song_title = songs_dict[random_song]
 
-# colors
-random_red = random.randint(0, 255)
-random_blue = random.randint(0, 255)
-random_green = random.randint(0, 255)
-RAINBOW = ((random_red), (random_blue), (random_green))
-LIGHT_BLUE = (150, 150, 200)
-BLACK = (0, 0, 0)
-DARK_BLUE = (100, 0, 200)
-COLOR_DARK = (50, 50, 50)
-COLOR_LIGHT = (100, 100, 100)
-COLOR = (255, 255, 255)
-GOLD = ("gold")
+# Random Actors
+random_actor = random.choice(list(actors_dict))
+word_actor = random_actor.upper()
+actor_title = actors_dict[random_actor]
 
-# Something
-def something():
+# Set up fonts
+font = pygame.font.Font(None, FONT_SIZE)
+button_font = pygame.font.Font(None, BUTTON_FONT_SIZE)
+
+# Function to render text
+def render_text(text, font, color, surface, x, y):
+    text_obj = font.render(text, True, color)
+    text_rect = text_obj.get_rect()
+    text_rect.center = (x, y)
+    surface.blit(text_obj, text_rect)
+
+# Riddles?
+def riddle_me():
+    # Game variables
+    current_riddle = 0
+    user_text = ''
+    input_box = pygame.Rect(50, 500, 700, 40)
+    input_box_active = False
+    submit_button_rect = pygame.Rect(50, 550, 120, 40)
+    back_button_rect = pygame.Rect(WIDTH/3*2.64, HEIGHT/3*2.55-15, 90, 40)
+    feedback = ''
+
+    # Main game loop
     running = True
     while running:
-        ...
+        win.fill(LIGHT_BLUE)
+        
+        # Display the current riddle
+        render_text(riddles[current_riddle]["riddle"], font, TEXT_COLOR, win, WIDTH // 2, HEIGHT // 2 - 50)
+        
+        # Draw input box
+        pygame.draw.rect(win, INPUT_BOX_COLOR, input_box, 2)
+        if input_box_active:
+            txt_surface = font.render(user_text, True, TEXT_COLOR)
+        else:
+            txt_surface = font.render(user_text, True, TEXT_COLOR)
+        win.blit(txt_surface, (input_box.x + 5, input_box.y + 5))
+        
+        # Draw submit button
+        pygame.draw.rect(win, COLOR_DARK, submit_button_rect)
+        render_text("Submit", button_font, WHITE, win, submit_button_rect.centerx, submit_button_rect.centery)
 
+        # Draw Back Button
+        pygame.draw.rect(win, COLOR_DARK, back_button_rect)
+        render_text("Back", button_font, WHITE, win, back_button_rect.centerx, back_button_rect.centery)
+
+        # Event handling
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if input_box.collidepoint(event.pos):
+                    input_box_active = True
+                else:
+                    input_box_active = False
+                if back_button_rect.collidepoint(event.pos):
+                    reset_game()
+                    
+                if submit_button_rect.collidepoint(event.pos):
+                    if user_text.lower() == riddles[current_riddle]["answer"]:
+                        feedback = "Correct!"
+                        current_riddle = (current_riddle + 1) % len(riddles)
+                        user_text = ''
+                    else:
+                        feedback = "Incorrect. Try again!"
+            
+            if event.type == pygame.KEYDOWN:
+                if input_box_active:
+                    if event.key == pygame.K_BACKSPACE:
+                        user_text = user_text[:-1]
+                    elif event.key == pygame.K_RETURN:
+                        if user_text.lower() == riddles[current_riddle]["answer"]:
+                            feedback = "Correct!"
+                            current_riddle = (current_riddle + 1) % len(riddles)
+                            user_text = ''
+                        else:
+                            feedback = "Incorrect. Try again!"
+                    else:
+                        user_text += event.unicode
+        
+        # Display feedback
+        render_text(feedback, font, TEXT_COLOR, win, WIDTH // 2, HEIGHT // 2 + 50)
+
+        # Update the display
+        pygame.display.flip()
+
+# Workaround to create a save file if there is none
 def play():
     global user_login
     try:
@@ -189,6 +207,7 @@ def play():
         load()
         main_menu()
 
+# Login
 def login():
     while True:
         global user_text
@@ -207,15 +226,22 @@ def login():
                 if WIDTH/3*2.64 <= mouse[0] <= WIDTH/3*2.64+90 and HEIGHT/3*2.55-15 <= mouse[1] <= HEIGHT/3*2.55+25:
                     pygame.quit()
                     sys.exit()
-            if ev.type == pygame.KEYDOWN and ev.key == pygame.K_BACKSPACE and len(user_text) >= 1:
-                user_text = user_text[:-1]
             if ev.type == pygame.KEYDOWN:
-                user_text += ev.unicode
-            if ev.type == pygame.KEYDOWN and ev.key == pygame.K_RETURN and len(user_text) >= 1 and not len(user_text) > 20:
-                user_name.append(user_text[:-1])
-                user_login = True
-                save()
-                main_menu()
+                if ev.key == pygame.K_BACKSPACE:
+                    # Remove the last character from the text if there's any
+                    user_text = user_text[:-1]
+                elif ev.key == pygame.K_RETURN:
+                    # Optionally handle Enter key
+                    user_name.append(user_text)
+                    user_login = True
+                    save()
+                    main_menu()
+                else:
+                    # Append character to user_text
+                    if ev.key == pygame.K_SPACE:
+                        user_text += ' '
+                    elif len(ev.unicode) == 1 and len(user_text) <= 26:  # Check if it's a printable character
+                        user_text += ev.unicode
 
         pygame.draw.rect(win,color,input_rect,0)
 
@@ -230,7 +256,7 @@ def login():
             pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*2.64, HEIGHT/3*2.55-15, 90, 40], 0, 10, 10, 10, 10) 
         else: 
             pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*2.64, HEIGHT/3*2.55-15, 90, 40], 0, 10, 10, 10, 10)
-        # quit
+        # Quit
         win.blit(text_quit, (WIDTH/3*2.64+10, HEIGHT/3*2.55-10))
 
         text_welcome = TITLE_FONT.render(f"Enter Your Name", 1, BLACK)
@@ -241,6 +267,7 @@ def login():
 # Save Func
 def save():
     game_state = {
+        "points": points,
         "user_login": user_login,
         "user_name": user_name,
         "player_streak": streak,
@@ -257,6 +284,7 @@ def save():
 
 # Load Func
 def load():
+    global points
     global streak
     global longest_streak
     global coins_available
@@ -268,6 +296,7 @@ def load():
     global user_name
     with open("save.json", "r") as f:
         game_state = json.load(f)
+        points = game_state["points"]
         user_login = game_state["user_login"]
         user_name = game_state["user_name"]
         streak = game_state["player_streak"]
@@ -278,24 +307,23 @@ def load():
         lost_total = game_state["lost_total"]
         hints_used = game_state["hints_used"]
 
-# Cal longest streak
+# Calculate Longest Streak
 def streak_add():
     global longest_streak
     if streak > longest_streak:
             longest_streak = streak
 
-# Draw function
+# Draw Function
 def draw():
     win.fill(LIGHT_BLUE)
-    global hint_status
-    global hint_status2
-    global hint_status3
+    global points
     global coins_available
-    # draw title
+
+    # Draw Title
     text = TITLE_FONT.render("HANGMAN", 1, BLACK)
     win.blit(text, (WIDTH/2 - text.get_width()/2, 20))
 
-    # draw word
+    # Draw Word
     display_word = ""
     for letter in choose:
         if letter in guessed:
@@ -306,103 +334,70 @@ def draw():
     text = WORD_FONT.render(display_word, 1, BLACK)
     win.blit(text, (400, 200))
 
-    # Add Hint button to show or hide hints
-    # Draw Hints
-    if hint_status == True and is_movies == True:
-        text_hint1 = HINT_FONT.render("Hint 1: " + movie_hint1, 1, BLACK)
-        win.blit(text_hint1, (WIDTH/2 - text_hint1.get_width()/2-20, HEIGHT/2+180))
-    elif hint_status == True and is_animals == True:
-        text_hint1 = HINT_FONT.render("Hint 1: " + animal_hint1, 1, BLACK)
-        win.blit(text_hint1, (WIDTH/2 - text_hint1.get_width()/2-20, HEIGHT/2+180))
-    elif hint_status == True and is_cities == True:
-        text_hint1 = HINT_FONT.render("Hint 1: " + cities_hint1, 1, BLACK)
-        win.blit(text_hint1, (WIDTH/2 - text_hint1.get_width()/2-20, HEIGHT/2+180))
-    else:
-        text_hint1 = HINT_FONT.render("Hint 1", 1, BLACK)
-        win.blit(text_hint1, (WIDTH/2 - text_hint1.get_width()/2-20, HEIGHT/2+180))
+    # Catagorie
+    if is_movies == True:
+        text_catagorie = HINT_FONT.render(f"'{movie_title}'", 1, BLACK)
+        win.blit(text_catagorie, (WIDTH/2 - text_catagorie.get_width()/2-20, HEIGHT/2-250))
+    if is_animals == True:
+        text_catagorie = HINT_FONT.render(f"'{animal_title}'", 1, BLACK)
+        win.blit(text_catagorie, (WIDTH/2 - text_catagorie.get_width()/2-20, HEIGHT/2-250))
+    if is_cities == True:
+        text_catagorie = HINT_FONT.render(f"'{city_title}'", 1, BLACK)
+        win.blit(text_catagorie, (WIDTH/2 - text_catagorie.get_width()/2-20, HEIGHT/2-250))
+    if is_songs == True:
+        text_catagorie = HINT_FONT.render(f"'{song_title}'", 1, BLACK)
+        win.blit(text_catagorie, (WIDTH/2 - text_catagorie.get_width()/2-20, HEIGHT/2-250))
+    if is_actors == True:
+        text_catagorie = HINT_FONT.render(f"'{actor_title}'", 1, BLACK)
+        win.blit(text_catagorie, (WIDTH/2 - text_catagorie.get_width()/2-20, HEIGHT/2-250))
 
-    if hint_status2 == True and is_movies == True:
-        text_hint2 = HINT_FONT.render("Hint 2: " + movie_hint2, 1, BLACK)
-        win.blit(text_hint2, (WIDTH/2 - text_hint2.get_width()/2-20, HEIGHT/2+230))
-    elif hint_status2 == True and is_animals == True:
-        text_hint2 = HINT_FONT.render("Hint 2: " + animal_hint2, 1, BLACK)
-        win.blit(text_hint2, (WIDTH/2 - text_hint2.get_width()/2-20, HEIGHT/2+230))
-    elif hint_status2 == True and is_cities == True:
-        text_hint2 = HINT_FONT.render("Hint 2: " + cities_hint2, 1, BLACK)
-        win.blit(text_hint2, (WIDTH/2 - text_hint2.get_width()/2-20, HEIGHT/2+230))
-    else:
-        text_hint2 = HINT_FONT.render("Hint 2", 1, BLACK)
-        win.blit(text_hint2, (WIDTH/2 - text_hint2.get_width()/2-20, HEIGHT/2+230))
-
-    if hint_status3 == True and is_movies == True:
-        text_hint2 = HINT_FONT.render("Hint 3: " + movie_hint3, 1, BLACK)
-        win.blit(text_hint2, (WIDTH/2 - text_hint2.get_width()/2-20, HEIGHT/2+280))
-    elif hint_status3 == True and is_animals == True:
-        text_hint2 = HINT_FONT.render("Hint 3: " + animal_hint3, 1, BLACK)
-        win.blit(text_hint2, (WIDTH/2 - text_hint2.get_width()/2-20, HEIGHT/2+280))
-    elif hint_status3 == True and is_cities == True:
-        text_hint2 = HINT_FONT.render("Hint 3: " + cities_hint3, 1, BLACK)
-        win.blit(text_hint2, (WIDTH/2 - text_hint2.get_width()/2-20, HEIGHT/2+280))
-    else:
-        text_hint2 = HINT_FONT.render("Hint 3", 1, BLACK)
-        win.blit(text_hint2, (WIDTH/2 - text_hint2.get_width()/2-20, HEIGHT/2+280))
-
-    # draw buttons
+    # Draw Alphabet Buttons
     for letter in letters:
         x, y, ltr, visible = letter
         m_x, m_y = pygame.mouse.get_pos()
         dis = math.sqrt((x - m_x)**2 + (y - m_y)**2)
         if visible and dis < RADIUS:
-            pygame.draw.circle(win, DARK_BLUE, (x, y), RADIUS, 7)
-            text = LETTER_FONT.render(ltr, 1, BLACK)
+            pygame.draw.circle(win, DARK_BLUE, (x, y), RADIUS, 0)
+            text = LETTER_FONT.render(ltr, 1, WHITE)
             win.blit(text, (x - text.get_width()/2, y - text.get_height()/2))
         if visible and not dis < RADIUS:
-            pygame.draw.circle(win, BLACK, (x, y), RADIUS, 7)
-            text = LETTER_FONT.render(ltr, 1, BLACK)
+            pygame.draw.circle(win, BLACK, (x, y), RADIUS, 0)
+            text = LETTER_FONT.render(ltr, 1, WHITE)
             win.blit(text, (x - text.get_width()/2, y - text.get_height()/2))
 
-    # draw back button
+    # Draw Back and Reveal Buttons
     mouse = pygame.mouse.get_pos()
     text_back = SMALLFONT.render('Back', True, COLOR)
-    hint_text = SMALLFONT.render('Hint', True, COLOR)
+    text_hint = SMALLFONT.render('Hint', True, COLOR)
 
-    # Back
+    # Back Button
     if WIDTH/3*2.64 <= mouse[0] <= WIDTH/3*2.64+90 and HEIGHT/3*2.55-15 <= mouse[1] <= HEIGHT/3*2.55+25: 
         pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*2.64, HEIGHT/3*2.55-15, 90, 40], 0, 10, 10, 10, 10) 
     else: 
         pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*2.64, HEIGHT/3*2.55-15, 90, 40], 0, 10, 10, 10, 10)
-    # Hint 1
-    if WIDTH/3*2.64-110 <= mouse[0] <= WIDTH/3*2.64-20 and HEIGHT/3*2.55-60 <= mouse[1] <= HEIGHT/3*2.55-20 and coins_available >= 10: 
-        pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*2.64-110, HEIGHT/3*2.55-60, 90, 40], 0, 10, 10, 10, 10)
-    else: 
-        pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*2.64-110, HEIGHT/3*2.55-60, 90, 40], 0, 10, 10, 10, 10)
-    # Hint 2
-    if WIDTH/3*2.64-110 <= mouse[0] <= WIDTH/3*2.64-20 and HEIGHT/3*2.55-15 <= mouse[1] <= HEIGHT/3*2.55+25 and coins_available >= 10: 
-        pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*2.64-110, HEIGHT/3*2.55-15, 90, 40], 0, 10, 10, 10, 10) 
-    else: 
-        pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*2.64-110, HEIGHT/3*2.55-15, 90, 40], 0, 10, 10, 10, 10)
-    # Hint 3
-    if WIDTH/3*2.64-110 <= mouse[0] <= WIDTH/3*2.64-20 and HEIGHT/3*2.55+30 <= mouse[1] <= HEIGHT/3*2.55+70 and coins_available >= 10: 
-        pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*2.64-110, HEIGHT/3*2.55+30, 90, 40], 0, 10, 10, 10, 10) 
-    else: 
-        pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*2.64-110, HEIGHT/3*2.55+30, 90, 40], 0, 10, 10, 10, 10)
 
-    # Back
+    # Random Letter Reveal Button
+    if WIDTH/3*2.64-150 <= mouse[0] <= WIDTH/3*2.64-60 and HEIGHT/3*2.55-15 <= mouse[1] <= HEIGHT/3*2.55+25: 
+        pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*2.64-150, HEIGHT/3*2.55-15, 90, 40], 0, 10, 10, 10, 10) 
+    else: 
+        pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*2.64-150, HEIGHT/3*2.55-15, 90, 40], 0, 10, 10, 10, 10)
+
+    # Back Text
     win.blit(text_back, (WIDTH/3*2.64+10, HEIGHT/3*2.55-10))
-    # hint 1
-    win.blit(hint_text, (WIDTH/3*2.64-97, HEIGHT/3*2.55-55))
-    # hint 2
-    win.blit(hint_text, (WIDTH/3*2.64-97, HEIGHT/3*2.55-10))
-    # hint 3
-    win.blit(hint_text, (WIDTH/3*2.64-97, HEIGHT/3*2.55+35))
-    # streak
+    # Reveal Letter Text
+    win.blit(text_hint, (WIDTH/3*2.64-137, HEIGHT/3*2.55-10))
+    # Streak Text
     streak_text = HINT_FONT.render(f"Streak: {streak}", True, BLACK)
     win.blit(streak_text, (25, 25))
-    # Available Coins
+    # Available Coins Text
     text_total_coins = HINT_FONT.render(f"Your Coins: {coins_available}", 1, GOLD)
     win.blit(text_total_coins, (WIDTH/2+400, HEIGHT/2-335))
-    
+    # Points Text
+    text_total_coins = HINT_FONT.render(f"Your Points: {points}", 1, BLACK)
+    win.blit(text_total_coins, (WIDTH/2+400, HEIGHT/2-300))
+    # Hangman Background
     win.blit(images[hangman_status], (150, 100))
+
     pygame.display.update()
 
 # End display function
@@ -425,6 +420,7 @@ def stats_menu():
         text_stats_lost_total = SMALLFONT.render(f'Total Games Lost:    {lost_total}', True, BLACK)
         text_stats_coins_used = SMALLFONT.render(f'Total Coins Used:     {coins_played}', True, BLACK)
         text_stats_hints_used = SMALLFONT.render(f'Total Hints Used:     {hints_used}', True, BLACK)
+        text_stats_points = SMALLFONT.render(f'Total points:         {points}', True, BLACK)
 
         mouse = pygame.mouse.get_pos()
         for ev in pygame.event.get():
@@ -452,65 +448,41 @@ def stats_menu():
         win.blit(text_stats_hints_used, (WIDTH/2-500, HEIGHT/2-50))
         # Back
         win.blit(text_stats_back, (WIDTH/3*2.64+10, HEIGHT/3*2.55-10))
+        # Points
+        win.blit(text_stats_points, (WIDTH/2-500, HEIGHT/2))
 
         pygame.display.update()
 
 # Put game while loop in its own function
 def main():
-    global hangman_status # so the function can access it within this loop
+    global hangman_status
     global streak
-    global hint_status
-    global hint_status2
-    global hint_status3
+    global points
     global coins_played
     global coins_available
     global won_total
     global lost_total
     global hints_used
-    # setup game loop
+
+    # Setup Game Loop
     run = True
 
     while run:
         CLOCK.tick(FPS)
-        # Check for events and enable the quit function
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
-            # Check for mouse press
+
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mouse = pygame.mouse.get_pos()
-                # Back
+
+                # Back Button
                 if WIDTH/3*2.64 <= mouse[0] <= WIDTH/3*2.64 + 90 and HEIGHT/3*2.55-15 <= mouse[1] <= HEIGHT/3*2.55+25:
                         reset_game()
-                # Hint 3
-                if WIDTH/3*2.64-110 <= mouse[0] <= WIDTH/3*2.64-20 and HEIGHT/3*2.55+30 <= mouse[1] <= HEIGHT/3*2.55+70:
-                    if coins_available >= 10:
-                        coins_available -= 10
-                        coins_played += 10
-                        hint_status3 = True
-                        hints_used += 1
-                    else:
-                        NEED_COINS_SOUND.play()
-
-                # Hint 2
-                if WIDTH/3*2.64-110 <= mouse[0] <= WIDTH/3*2.64-20 and HEIGHT/3*2.55-15 <= mouse[1] <= HEIGHT/3*2.55+30:
-                    if coins_available >= 10:
-                        coins_available -= 10
-                        coins_played += 10
-                        hint_status2 = True
-                        hints_used += 1
-                    else:
-                        NEED_COINS_SOUND.play()
-
-                # Hint 1
-                if WIDTH/3*2.64-110 <= mouse[0] <= WIDTH/3*2.64-20 and HEIGHT/3*2.55-60 <= mouse[1] <= HEIGHT/3*2.55-20:
-                    if coins_available >= 10:
-                        coins_available -= 10
-                        coins_played += 10
-                        hint_status = True
-                        hints_used += 1
-                    else:
-                        NEED_COINS_SOUND.play()
+                # Reveal Button
+                if WIDTH/3*2.64-150 <= mouse[0] <= WIDTH/3*2.64-60 and HEIGHT/3*2.55-15 <= mouse[1] <= HEIGHT/3*2.55+25:
+                    ...
                 
                 for letter in letters:
                     x, y, ltr, visible = letter
@@ -521,21 +493,24 @@ def main():
                             guessed.append(ltr)
                             if ltr in choose:
                                 RIGHT_LETTER_SOUND.play()
+                                if points <= 1000000000:
+                                    points += 50
 
                             if ltr not in choose:
                                 WRONG_LETTER_SOUND.play()
                                 hangman_status += 1
-        # call draw function
+                                points -= 20
+        # Call Draw Function
         draw()
 
-        # Check end condition
+        # Check End Condition
         won = True
         for letter in choose:
             if letter not in guessed and not letter.isspace():
                 won = False
                 break
         
-        # Won end screen
+        # Won End Screen
         if won:
             VICTORY_SOUND.play()
             won_total += 1
@@ -545,7 +520,7 @@ def main():
             display_message(f"YOU WON! Your streak is {streak} and got 10 Coins!")
             break
         
-        # Lost end screen
+        # Lost End Screen
         if hangman_status == 6:
             LOST_SOUND.play()
             lost_total += 1
@@ -557,38 +532,37 @@ def main():
     save()
     reset_game()
 
-# reset letters, guessed list, random word
+# Reset Letters, Guessed List, Random Word
 def reset_game():
     global choose
     global hangman_status
-    global hint_status
-    global hint_status2
-    global hint_status3
     # Movies
     global random_movie
     global word_movies
-    global movie_hint1
-    global movie_hint2
+    global movie_title
     # Animals
     global random_animal
-    global word_animals
-    global animal_hint1
-    global animal_hint2
+    global word_animal
+    global animal_title
     # Cities
     global random_city
-    global word_cities
-    global cities_hint1
-    global cities_hint2
+    global word_city
+    global city_title
     # Songs
-    global word_songs
-    global random_word_songs
+    global random_song
+    global word_song
+    global song_title
+    # Actors
+    global random_actor
+    global word_actor
+    global actor_title
 
     global is_movies
     global is_animals
     global is_cities
+    global is_songs
+    global is_actors
 
-    global game_saved
-    global loaded
     global guessed
     global letters
     global i
@@ -596,38 +570,31 @@ def reset_game():
     global y
     hangman_status = 0
     # Movies
-    random_movie = random.choice(movies)
-    random_word_movies = random_movie[0]
-    word_movies = random_word_movies.upper()
-    movie_hint1 = random_movie[1]
-    movie_hint2 = random_movie[2]
+    random_movie = random.choice(list(movies_dict))
+    word_movies = random_movie.upper()
+    movie_title = movies_dict[random_movie]
     # Animals
-    random_animal = random.choice(animals)
-    random_word_animals = random_animal[0]
-    word_animals = random_word_animals.upper()
-    animal_hint1 = random_animal[1]
-    animal_hint2 = random_animal[2]
+    random_animal = random.choice(list(animals_dict))
+    word_animal = random_animal.upper()
+    animal_title = animals_dict[random_animal]
     # Cities
-    random_city = random.choice(cities)
-    random_word_cities = random_city[0]
-    word_cities = random_word_cities.upper()
-    cities_hint1 = random_city[1]
-    cities_hint2 = random_city[2]
+    random_city = random.choice(list(cities_dict))
+    word_city = random_city.upper()
+    city_title = cities_dict[random_city]
     # Songs
-    random_word_songs = random.choice(songs)
-    word_songs = random_word_songs
+    random_song = random.choice(list(songs_dict))
+    word_song = random_song.upper()
+    song_title = songs_dict[random_song]
+    # Actors
+    random_actor = random.choice(list(actors_dict))
+    word_actor = random_actor.upper()
+    actor_title = actors_dict[random_actor]
 
     is_movies = False
     is_animals = False
     is_cities = False
-
-    # Hint
-    hint_status = False
-    hint_status2 = False
-    hint_status3 = False
-
-    game_saved = False
-    loaded = False
+    is_songs = False
+    is_actors = False
 
     choose = []
     guessed = []
@@ -639,12 +606,12 @@ def reset_game():
         letters.append([x, y, chr(A + i), True])
     main_menu()
 
-# Main menu loop
+# Main Menu Loop
 def main_menu():
 
     while True:
-        CLOCK.tick(FPS)
         load()
+        global points
         global streak
         global longest_streak
         global won_total
@@ -656,25 +623,24 @@ def main_menu():
         global is_movies
         global is_animals
         global is_cities
-        global game_saved
-        global loaded
+        global is_songs
+        global is_actors
 
         win.fill(LIGHT_BLUE)
 
-        # font
+        # Font
         signfont = pygame.font.SysFont('Corbel', 20, True)
-        boldfont = pygame.font.SysFont('Comicsans', 40, True)
         text_quit = SMALLFONT.render('Quit', True, COLOR)
         text_movies = SMALLFONT.render('Movies', True, COLOR)
         text_animals = SMALLFONT.render('Animals', True, COLOR)
         text_cities = SMALLFONT.render('Cities', True, COLOR)
-        text_streak = boldfont.render('Your Streak: ' + str(streak), True, BLACK)
-        text_save = SMALLFONT.render('Save', True, COLOR)
-        text_saved = SMALLFONT.render('Game Saved', True, BLACK)
-        text_load = SMALLFONT.render('Load', True, COLOR)
-        text_loaded = SMALLFONT.render('Game Loaded', True, BLACK)
+        text_songs = SMALLFONT.render('Songs', True, COLOR)
+        text_actors = SMALLFONT.render('Actors', True, COLOR)
+        text_streak = SMALLFONT.render('Your Streak: ' + str(streak), True, BLACK)
         text_stats = SMALLFONT.render('STATS', True, COLOR)
-        signed = signfont.render('Game by GJ Vlok', True, RAINBOW)
+        text_total_coins = HINT_FONT.render(f"Your Coins: {coins_available}", 1, GOLD)
+        text_points = HINT_FONT.render(f"Your Points: {points}", 1, BLACK)
+        signed = signfont.render("Game by GJ Vlok", True, RAINBOW)
         
         # Main Menu Text
         text_welcome = TITLE_FONT.render(f"Welcome, {user_name[0]} to", 1, BLACK)
@@ -682,7 +648,7 @@ def main_menu():
 
         text_hangman = HANGMAN_FONT.render("RIDDLE ME HANGMAN", 1, LIGHT_BLUE)
         
-        text_choose = TITLE_FONT.render('Choose a catagory', 1, BLACK)
+        text_choose = TITLE_FONT.render("Choose a category", 1, BLACK)
         win.blit(text_choose, (WIDTH/2 - text_choose.get_width()/2, 250))
 
         mouse = pygame.mouse.get_pos()
@@ -694,20 +660,12 @@ def main_menu():
             if ev.type == pygame.MOUSEBUTTONDOWN:
                 # Something
                 if WIDTH/3*0.67 <= mouse[0] <= WIDTH/3*0.67+780 and HEIGHT/3*0.6 <= mouse[1] <= HEIGHT/3*0.6+70:
-                    choose = word_songs
-                    main()
-                # Save
-                if WIDTH/3*2.64 <= mouse[0] <= WIDTH/3*2.64+90 and HEIGHT/3*2.55-115 <= mouse[1] <= HEIGHT/3*2.55-85:
-                    game_saved = True
-                    save()
-                # Load
-                if WIDTH/3*2.64 <= mouse[0] <= WIDTH/3*2.64+90 and HEIGHT/3*2.55-65 <= mouse[1] <= HEIGHT/3*2.55-25:
-                    loaded = True
-                    load()
+                    riddle_me()
                 # Quit
                 if WIDTH/3*2.64 <= mouse[0] <= WIDTH/3*2.64+90 and HEIGHT/3*2.55-15 <= mouse[1] <= HEIGHT/3*2.55+25:
                     save()
                     pygame.quit()
+                    sys.exit()
                 # Movies
                 if WIDTH/3*1.3 <= mouse[0] <= WIDTH/3*1.3+140 and HEIGHT/3*1.5 <= mouse[1] <= HEIGHT/3*1.5+40:
                     choose = word_movies
@@ -715,18 +673,27 @@ def main_menu():
                     main()
                 # Animals
                 if WIDTH/3*1.3 <= mouse[0] <= WIDTH/3*1.3+140 and HEIGHT/3*1.5+50 <= mouse[1] <= HEIGHT/3*1.5+90:
-                    choose = word_animals
+                    choose = word_animal
                     is_animals = True
                     main()
                 # Cities
                 if WIDTH/3*1.3 <= mouse[0] <= WIDTH/3*1.3+140 and HEIGHT/3*1.5+100 <= mouse[1] <= HEIGHT/3*1.5+140:
-                    choose = word_cities
+                    choose = word_city
                     is_cities = True
+                    main()
+                # Songs
+                if WIDTH/3*1.3 <= mouse[0] <= WIDTH/3*1.3+140 and HEIGHT/3*1.5+150 <= mouse[1] <= HEIGHT/3*1.5+190:
+                    choose = word_song
+                    is_songs = True
+                    main()
+                # Actors
+                if WIDTH/3*1.3 <= mouse[0] <= WIDTH/3*1.3+140 and HEIGHT/3*1.5+200 <= mouse[1] <= HEIGHT/3*1.5+240:
+                    choose = word_actor
+                    is_actors = True
                     main()
                 # Stats
                 if WIDTH/3*0.2 <= mouse[0] <= WIDTH/3*0.2+100 and HEIGHT/3*0.2 <= mouse[1] <= HEIGHT/3*0.2+50:
                     stats_menu()
-
         # Buttons
         # Something button
         if WIDTH/3*0.67 <= mouse[0] <= WIDTH/3*0.67+780 and HEIGHT/3*0.6 <= mouse[1] <= HEIGHT/3*0.6+70:
@@ -738,64 +705,60 @@ def main_menu():
             pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*0.2, HEIGHT/3*0.2, 100, 50], 0, 10, 10, 10, 10) 
         else: 
             pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*0.2, HEIGHT/3*0.2, 100, 50], 0, 10, 10, 10, 10)
-        # Save button
-        if WIDTH/3*2.64 <= mouse[0] <= WIDTH/3*2.64+90 and HEIGHT/3*2.55-115 <= mouse[1] <= HEIGHT/3*2.55-85: 
-            pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*2.64, HEIGHT/3*2.55-115, 90, 40], 0, 10, 10, 10, 10) 
-        else: 
-            pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*2.64, HEIGHT/3*2.55-115, 90, 40], 0, 10, 10, 10, 10)
-        # Load
-        if WIDTH/3*2.64 <= mouse[0] <= WIDTH/3*2.64+90 and HEIGHT/3*2.55-65 <= mouse[1] <= HEIGHT/3*2.55-25: 
-            pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*2.64, HEIGHT/3*2.55-65, 90, 40], 0, 10, 10, 10, 10) 
-        else: 
-            pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*2.64, HEIGHT/3*2.55-65, 90, 40], 0, 10, 10, 10, 10)
         # Quit button
         if WIDTH/3*2.64 <= mouse[0] <= WIDTH/3*2.64+90 and HEIGHT/3*2.55-15 <= mouse[1] <= HEIGHT/3*2.55+25: 
             pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*2.64, HEIGHT/3*2.55-15, 90, 40], 0, 10, 10, 10, 10) 
         else: 
             pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*2.64, HEIGHT/3*2.55-15, 90, 40], 0, 10, 10, 10, 10)
-        # Catagory Movies
+        # Category Movies
         if WIDTH/3*1.3 <= mouse[0] <= WIDTH/3*1.3+140 and HEIGHT/3*1.5 <= mouse[1] <= HEIGHT/3*1.5+40: 
             pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*1.3, HEIGHT/3*1.5, 140, 40], 0, 10, 10, 10, 10) 
         else: 
             pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*1.3, HEIGHT/3*1.5, 140, 40], 0, 10, 10, 10, 10)
-        # Catagory Animals
+        # Category Animals
         if WIDTH/3*1.3 <= mouse[0] <= WIDTH/3*1.3+140 and HEIGHT/3*1.5+50 <= mouse[1] <= HEIGHT/3*1.5+90: 
             pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*1.3, HEIGHT/3*1.5+50, 140, 40], 0, 10, 10, 10, 10) 
         else: 
             pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*1.3, HEIGHT/3*1.5+50, 140, 40], 0, 10, 10, 10, 10)
-        # Catagory Cities
+        # Category Cities
         if WIDTH/3*1.3 <= mouse[0] <= WIDTH/3*1.3+140 and HEIGHT/3*1.5+100 <= mouse[1] <= HEIGHT/3*1.5+140: 
             pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*1.3, HEIGHT/3*1.5+100, 140, 40], 0, 10, 10, 10, 10) 
         else: 
             pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*1.3, HEIGHT/3*1.5+100, 140, 40], 0, 10, 10, 10, 10)
+        # Category Songs
+        if WIDTH/3*1.3 <= mouse[0] <= WIDTH/3*1.3+140 and HEIGHT/3*1.5+150 <= mouse[1] <= HEIGHT/3*1.5+190: 
+            pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*1.3, HEIGHT/3*1.5+150, 140, 40], 0, 10, 10, 10, 10) 
+        else: 
+            pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*1.3, HEIGHT/3*1.5+150, 140, 40], 0, 10, 10, 10, 10)
+        # Category Actors
+        if WIDTH/3*1.3 <= mouse[0] <= WIDTH/3*1.3+140 and HEIGHT/3*1.5+200 <= mouse[1] <= HEIGHT/3*1.5+240: 
+            pygame.draw.rect(win, COLOR_LIGHT, [WIDTH/3*1.3, HEIGHT/3*1.5+200, 140, 40], 0, 10, 10, 10, 10) 
+        else: 
+            pygame.draw.rect(win, COLOR_DARK, [WIDTH/3*1.3, HEIGHT/3*1.5+200, 140, 40], 0, 10, 10, 10, 10)
 
-        # Somthing
+        # Something
         win.blit(text_hangman, (WIDTH/3*0.67+10, HEIGHT/3*0.6-5))
-        # Save
-        win.blit(text_save, (WIDTH/3*2.64+10, HEIGHT/3*2.55-110))
-        # Load
-        win.blit(text_load, (WIDTH/3*2.64+8, HEIGHT/3*2.55-60))
-        # quit
+        # Quit
         win.blit(text_quit, (WIDTH/3*2.64+10, HEIGHT/3*2.55-10))
-        # movies
+        # Movies
         win.blit(text_movies, (WIDTH/3*1.3+20, HEIGHT/3*1.5+5))
-        # animals
+        # Animals
         win.blit(text_animals, (WIDTH/3*1.3+10, HEIGHT/3*1.5+55))
-        # cities
+        # Cities
         win.blit(text_cities, (WIDTH/3*1.3+30, HEIGHT/3*1.5+105))
-        # streak
-        win.blit(text_streak, (WIDTH/3*1.08, HEIGHT/3*2.55))
+        # Songs
+        win.blit(text_songs, (WIDTH/3*1.3+25, HEIGHT/3*1.5+155))
+        # Actors
+        win.blit(text_actors, (WIDTH/3*1.3+20, HEIGHT/3*1.5+205))
+        # Streak
+        win.blit(text_streak, (WIDTH/3*1.08, HEIGHT/3*2.55+25))
         # STATS
         win.blit(text_stats, (WIDTH/3*0.2, HEIGHT/3*0.2+10))
         # Available Coins
-        text_total_coins = HINT_FONT.render(f"Your Coins: {coins_available}", 1, GOLD)
         win.blit(text_total_coins, (WIDTH/2+400, HEIGHT/2-335))
-
-        if game_saved == True:
-            win.blit(text_saved, (WIDTH/3*2.64-220, HEIGHT/3*2.55-112))
-        if loaded == True:
-            win.blit(text_loaded, (WIDTH/3*2.64-220, HEIGHT/3*2.55-62))
-        
+        # Points
+        win.blit(text_points, (WIDTH/2+400, HEIGHT/2-300))
+        # Signed
         win.blit(signed, (WIDTH/2*0.88, HEIGHT/2*0.01))
 
         pygame.display.update()
