@@ -26,16 +26,17 @@ hints_used = 0
 longest_streak = 0
 points = 0
 
-# States
+# Game Variables
 user_login = False
 is_movies = False
 is_animals = False
 is_cities = False
 is_songs = False
 is_actors = False
-guessed = []
+guessed = set()
 choose = []
 streak = 0
+hangman_status = 0
 
 # Button Variables
 RADIUS = 35
@@ -79,9 +80,6 @@ VICTORY_SOUND = pygame.mixer.Sound(join("assets", "sound", "rightanswer.mp3"))
 pygame.mixer.music.load(join("assets", "sound", "GentleWavesOfSound.mp3"))
 pygame.mixer.music.play(loops=-1, start=0.0, fade_ms=750)
 pygame.mixer.music.set_volume(0.2)
-
-# Game Variables
-hangman_status = 0
 
 # Random Movies
 random_movie = random.choice(list(movies_dict))
@@ -313,6 +311,39 @@ def streak_add():
     if streak > longest_streak:
             longest_streak = streak
 
+# Display Word in Main
+def update_display_word(choose, guessed):
+    display_word = ""
+    for letter in choose:
+        if letter in guessed:
+            display_word += letter + " "
+        else:
+            display_word += "_ " if not letter.isspace() else "  "
+    return display_word
+
+# Add Random Letter When the Hint Button Is Pressed
+def add_random_letter(choose, guessed): # ChatGPT Code
+    # Find all unique letters in the 'choose' word that have not been guessed
+    unique_letters = set(choose) - guessed
+    
+    # Remove spaces from the unique_letters set
+    unique_letters.discard(' ')
+    
+    # Convert set to list and choose a random letter
+    if unique_letters:
+        random_letter = random.choice(list(unique_letters))
+        guessed.add(random_letter)
+
+        # Update visibility of the selected letter button
+        for letter in letters:
+            if letter[2] == random_letter:
+                print(letter[2])
+                letter[3] = False # Set the button as invisible
+                break
+
+        return random_letter
+    return None
+
 # Draw Function
 def draw():
     win.fill(LIGHT_BLUE)
@@ -323,31 +354,20 @@ def draw():
     text = TITLE_FONT.render("HANGMAN", 1, BLACK)
     win.blit(text, (WIDTH/2 - text.get_width()/2, 20))
 
-    # Draw Word
-    display_word = ""
-    for letter in choose:
-        if letter in guessed:
-            display_word += letter + " "
-        else:
-            display_word += "_ " if not letter.isspace() else "  "
-
-    text = WORD_FONT.render(display_word, 1, BLACK)
-    win.blit(text, (400, 200))
-
     # Catagorie
     if is_movies == True:
         text_catagorie = HINT_FONT.render(f"'{movie_title}'", 1, BLACK)
         win.blit(text_catagorie, (WIDTH/2 - text_catagorie.get_width()/2-20, HEIGHT/2-250))
-    if is_animals == True:
+    elif is_animals == True:
         text_catagorie = HINT_FONT.render(f"'{animal_title}'", 1, BLACK)
         win.blit(text_catagorie, (WIDTH/2 - text_catagorie.get_width()/2-20, HEIGHT/2-250))
-    if is_cities == True:
+    elif is_cities == True:
         text_catagorie = HINT_FONT.render(f"'{city_title}'", 1, BLACK)
         win.blit(text_catagorie, (WIDTH/2 - text_catagorie.get_width()/2-20, HEIGHT/2-250))
-    if is_songs == True:
+    elif is_songs == True:
         text_catagorie = HINT_FONT.render(f"'{song_title}'", 1, BLACK)
         win.blit(text_catagorie, (WIDTH/2 - text_catagorie.get_width()/2-20, HEIGHT/2-250))
-    if is_actors == True:
+    elif is_actors == True:
         text_catagorie = HINT_FONT.render(f"'{actor_title}'", 1, BLACK)
         win.blit(text_catagorie, (WIDTH/2 - text_catagorie.get_width()/2-20, HEIGHT/2-250))
 
@@ -397,6 +417,10 @@ def draw():
     win.blit(text_total_coins, (WIDTH/2+400, HEIGHT/2-300))
     # Hangman Background
     win.blit(images[hangman_status], (150, 100))
+
+    display_word = update_display_word(choose, guessed)
+    text = WORD_FONT.render(display_word, 1, BLACK)
+    win.blit(text, (400, 200))
 
     pygame.display.update()
 
@@ -479,10 +503,21 @@ def main():
 
                 # Back Button
                 if WIDTH/3*2.64 <= mouse[0] <= WIDTH/3*2.64 + 90 and HEIGHT/3*2.55-15 <= mouse[1] <= HEIGHT/3*2.55+25:
-                        reset_game()
+                    save()
+                    reset_game()
                 # Reveal Button
                 if WIDTH/3*2.64-150 <= mouse[0] <= WIDTH/3*2.64-60 and HEIGHT/3*2.55-15 <= mouse[1] <= HEIGHT/3*2.55+25:
-                    ...
+                    if coins_available >= 50:
+                        coins_available -= 50
+                        coins_played += 50
+                        hints_used += 1
+                        letter = add_random_letter(choose, guessed)
+                        if letter:
+                            RIGHT_LETTER_SOUND.play()
+                        else:
+                            NEED_COINS_SOUND.play()
+                    else:
+                        NEED_COINS_SOUND.play()
                 
                 for letter in letters:
                     x, y, ltr, visible = letter
@@ -490,7 +525,7 @@ def main():
                         dis = math.sqrt((x - mouse[0])**2 + (y - mouse[1])**2)
                         if dis < RADIUS:
                             letter[3] = False
-                            guessed.append(ltr)
+                            guessed.add(ltr)
                             if ltr in choose:
                                 RIGHT_LETTER_SOUND.play()
                                 if points <= 1000000000:
@@ -500,6 +535,7 @@ def main():
                                 WRONG_LETTER_SOUND.play()
                                 hangman_status += 1
                                 points -= 20
+
         # Call Draw Function
         draw()
 
@@ -537,37 +573,24 @@ def reset_game():
     global choose
     global hangman_status
     # Movies
-    global random_movie
-    global word_movies
-    global movie_title
+    global random_movie, word_movies, movie_title
     # Animals
-    global random_animal
-    global word_animal
-    global animal_title
+    global random_animal, word_animal, animal_title
     # Cities
-    global random_city
-    global word_city
-    global city_title
+    global random_city, word_city, city_title
     # Songs
-    global random_song
-    global word_song
-    global song_title
+    global random_song, word_song, song_title
     # Actors
-    global random_actor
-    global word_actor
-    global actor_title
-
+    global random_actor, word_actor, actor_title
     global is_movies
     global is_animals
     global is_cities
     global is_songs
     global is_actors
-
     global guessed
     global letters
-    global i
-    global x
-    global y
+    choose = []
+    guessed = set()
     hangman_status = 0
     # Movies
     random_movie = random.choice(list(movies_dict))
@@ -595,15 +618,16 @@ def reset_game():
     is_cities = False
     is_songs = False
     is_actors = False
-
-    choose = []
-    guessed = []
-    letters = []
     
+    letters = []
+    startx = round((WIDTH - (RADIUS * 2 + GAP) * 13) / 2)
+    starty = 400
+    A = 65
     for i in range(26):
         x = startx + GAP * 2 + ((RADIUS * 2 + GAP) * (i % 13))
         y = starty + ((i // 13) * (GAP + RADIUS * 2))
         letters.append([x, y, chr(A + i), True])
+
     main_menu()
 
 # Main Menu Loop
